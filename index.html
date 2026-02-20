@@ -2,87 +2,575 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Cells Map</title>
+  <title>JiM project map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- MapLibre CSS -->
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 
   <style>
-    body { margin: 0; padding: 0; }
-    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    :root{
+      --bg: #0b0b0b;
+      --fg: #ffffff;
+      --panel-bg: rgba(255,255,255,0.95);
+      --panel-border: rgba(0,0,0,0.12);
+      --text: #111;
+    }
+
+    html, body { height: 100%; margin: 0; }
+    #map { position: absolute; top: 64px; bottom: 0; width: 100%; }
+
+    .topbar{
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 64px;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 14px;
+      z-index: 5;
+      box-sizing: border-box;
+    }
+
+    .topbar .title{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.2;
+      font-weight: 650;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .logos{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .logos img{
+      height: 34px;
+      width: auto;
+      display: block;
+      filter: grayscale(1);
+      opacity: 0.95;
+    }
+
+    .panel{
+      position: absolute;
+      top: 78px;
+      left: 12px;
+      z-index: 4;
+      width: 360px;
+      max-width: calc(100% - 24px);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+      padding: 12px;
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    .panel h3{
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .row{
+      display: flex;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 10px;
+    }
+
+    .field{
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label{
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    select, button{
+      height: 34px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.18);
+      background: white;
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+    button{
+      cursor: pointer;
+      background: #f7f7f7;
+      font-weight: 650;
+    }
+
+    .kpi{
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: rgba(250,250,250,0.9);
+    }
+
+    .kpi .big{
+      font-size: 18px;
+      font-weight: 750;
+    }
+    .kpi .small{
+      font-size: 12px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
+
+    .hint{
+      font-size: 12px;
+      opacity: 0.75;
+      margin-top: 8px;
+    }
   </style>
 </head>
 
 <body>
-<div id="map"></div>
+  <div class="topbar">
+    <div class="title">JiM project, Measuring accessibility to services in the 15 Minute City</div>
+    <div class="logos">
+      <img src="assets/jim.png" alt="JiM" />
+      <img src="assets/dut.png" alt="DUT Driving Urban Transitions" />
+      <img src="assets/gemott.png" alt="GEMOTT" />
+      <img src="assets/uab.png" alt="UAB" />
+    </div>
+  </div>
 
-<script>
-  // Basemap OpenStreetMap raster
-  const style = {
-    version: 8,
-    sources: {
+  <div id="map"></div>
+
+  <div class="panel">
+    <h3>Exploration</h3>
+
+    <div class="row">
+      <div class="field">
+        <label for="citySelect">Ville</label>
+        <select id="citySelect"></select>
+      </div>
+
+      <div class="field" style="max-width: 140px;">
+        <label for="basemapSelect">Fond</label>
+        <select id="basemapSelect">
+          <option value="osm">OSM</option>
+          <option value="carto_positron">CARTO Positron</option>
+          <option value="carto_voyager">CARTO Voyager</option>
+          <option value="opentopo">OpenTopoMap</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="varSelect">Variable à sommer (sélection)</label>
+        <select id="varSelect"></select>
+      </div>
+      <div class="field" style="max-width: 130px;">
+        <label>&nbsp;</label>
+        <button id="clearSelBtn">Clear</button>
+      </div>
+    </div>
+
+    <div class="kpi">
+      <div class="big" id="sumValue">0</div>
+      <div class="small" id="sumMeta">Somme sur 0 polygones sélectionnés</div>
+    </div>
+
+    <div class="hint">
+      Astuce: clique sur des polygones pour les sélectionner. Change la ville pour recentrer la carte.
+    </div>
+  </div>
+
+  <script>
+    const BASEMAPS = {
       osm: {
-        type: "raster",
-        tiles: [
-          "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        ],
-        tileSize: 256,
-        attribution: "© OpenStreetMap contributors"
+        version: 8,
+        sources: {
+          base: {
+            type: "raster",
+            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors"
+          }
+        },
+        layers: [{ id: "base", type: "raster", source: "base" }]
+      },
+      carto_positron: {
+        version: 8,
+        sources: {
+          base: {
+            type: "raster",
+            tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+                    "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+                    "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+                    "https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors, © CARTO"
+          }
+        },
+        layers: [{ id: "base", type: "raster", source: "base" }]
+      },
+      carto_voyager: {
+        version: 8,
+        sources: {
+          base: {
+            type: "raster",
+            tiles: ["https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+                    "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+                    "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+                    "https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors, © CARTO"
+          }
+        },
+        layers: [{ id: "base", type: "raster", source: "base" }]
+      },
+      opentopo: {
+        version: 8,
+        sources: {
+          base: {
+            type: "raster",
+            tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+                    "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
+                    "https://c.tile.opentopomap.org/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors, © OpenTopoMap"
+          }
+        },
+        layers: [{ id: "base", type: "raster", source: "base" }]
       }
-    },
-    layers: [
-      {
-        id: "osm",
-        type: "raster",
-        source: "osm"
-      }
-    ]
-  };
+    };
 
-  const map = new maplibregl.Map({
-    container: "map",
-    style: style,
-    center: [2.137, 41.445],  // centre approximatif de ton bbox
-    zoom: 14
-  });
-
-  map.addControl(new maplibregl.NavigationControl(), "top-right");
-
-  map.on("load", function () {
-
-    // Charger ton GeoJSON
-    map.addSource("cells", {
-      type: "geojson",
-      data: "data/cells.geojson"
+    const map = new maplibregl.Map({
+      container: "map",
+      style: BASEMAPS.osm,
+      center: [2.137, 41.445],
+      zoom: 13
     });
 
-    // Couche polygones
-    map.addLayer({
-      id: "cells-fill",
-      type: "fill",
-      source: "cells",
-      paint: {
-        "fill-color": "#0077ff",
-        "fill-opacity": 0.4
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    let allData = null;
+    let currentCity = null;
+    let currentVar = null;
+    const selectedIds = new Set();
+
+    function setSumUI(sum, n, varName) {
+      const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+      document.getElementById("sumValue").textContent = fmt.format(sum);
+      document.getElementById("sumMeta").textContent = `Somme de ${varName} sur ${n} polygones sélectionnés`;
+    }
+
+    function computeBBoxForFeatures(features) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      function scanCoords(coords) {
+        for (const c of coords) {
+          if (Array.isArray(c[0])) scanCoords(c);
+          else {
+            const x = c[0], y = c[1];
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
       }
-    });
 
-    // Contours
-    map.addLayer({
-      id: "cells-outline",
-      type: "line",
-      source: "cells",
-      paint: {
-        "line-color": "#003366",
-        "line-width": 1
+      for (const f of features) {
+        if (!f.geometry) continue;
+        scanCoords(f.geometry.coordinates);
       }
-    });
 
-  });
-</script>
+      if (!isFinite(minX)) return null;
+      return [minX, minY, maxX, maxY];
+    }
 
+    function fitToCity(features) {
+      const b = computeBBoxForFeatures(features);
+      if (!b) return;
+      map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, duration: 700 });
+    }
+
+    function filterToCity(city) {
+      if (!allData) return;
+
+      currentCity = city;
+
+      const cityFeatures = allData.features.filter(f => String(f.properties?.city ?? "") === String(city));
+      const cityFC = { type: "FeatureCollection", features: cityFeatures };
+
+      if (map.getSource("cells")) {
+        map.getSource("cells").setData(cityFC);
+      }
+
+      selectedIds.clear();
+      refreshSelectionStyles();
+      recomputeSelectionSum();
+
+      fitToCity(cityFeatures);
+    }
+
+    function refreshSelectionStyles() {
+      if (!map.getSource("cells")) return;
+
+      // reset all feature-state is expensive without iterating ids, so we rely on per click updates
+      // on city change we just redraw source and clear layer paint expression uses feature-state
+    }
+
+    function recomputeSelectionSum() {
+      if (!allData || !currentCity || !currentVar) {
+        setSumUI(0, 0, currentVar || "variable");
+        return;
+      }
+
+      const cityFeatures = allData.features.filter(f => String(f.properties?.city ?? "") === String(currentCity));
+      let sum = 0;
+      let n = 0;
+
+      for (const f of cityFeatures) {
+        const id = f.properties?.id;
+        if (!selectedIds.has(String(id))) continue;
+
+        const v = Number(f.properties?.[currentVar]);
+        if (!Number.isFinite(v)) continue;
+
+        sum += v;
+        n += 1;
+      }
+
+      setSumUI(sum, n, currentVar);
+    }
+
+    async function init() {
+      const res = await fetch("data/cells.geojson");
+      allData = await res.json();
+
+      // options ville
+      const cities = Array.from(new Set(allData.features.map(f => String(f.properties?.city ?? "")).filter(x => x.length > 0))).sort();
+      const citySelect = document.getElementById("citySelect");
+      citySelect.innerHTML = cities.map(c => `<option value="${c}">${c}</option>`).join("");
+
+      // options variables
+      // on prend les champs numériques probables à partir de la première feature
+      const sampleProps = allData.features[0]?.properties || {};
+      const ignore = new Set(["geom", "geometry", "city"]);
+      const numericCandidates = Object.keys(sampleProps)
+        .filter(k => !ignore.has(k))
+        .filter(k => {
+          const v = sampleProps[k];
+          return typeof v === "number" || (typeof v === "string" && v !== "" && !isNaN(Number(v)));
+        })
+        .sort();
+
+      const varSelect = document.getElementById("varSelect");
+      varSelect.innerHTML = numericCandidates.map(v => `<option value="${v}">${v}</option>`).join("");
+
+      currentCity = cities[0] || null;
+      currentVar = numericCandidates.includes("total_pop") ? "total_pop" : (numericCandidates[0] || null);
+
+      if (currentCity) citySelect.value = currentCity;
+      if (currentVar) varSelect.value = currentVar;
+
+      // ajouter source et layers une seule fois
+      map.on("load", () => {
+        // source avec promoteId pour feature-state basé sur properties.id
+        map.addSource("cells", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+          promoteId: "id"
+        });
+
+        map.addLayer({
+          id: "cells-fill",
+          type: "fill",
+          source: "cells",
+          paint: {
+            "fill-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#ffcc00",
+              "#1f78ff"
+            ],
+            "fill-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              0.65,
+              0.35
+            ]
+          }
+        });
+
+        map.addLayer({
+          id: "cells-outline",
+          type: "line",
+          source: "cells",
+          paint: {
+            "line-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#000000",
+              "#003366"
+            ],
+            "line-width": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              2,
+              1
+            ]
+          }
+        });
+
+        map.on("mouseenter", "cells-fill", () => map.getCanvas().style.cursor = "pointer");
+        map.on("mouseleave", "cells-fill", () => map.getCanvas().style.cursor = "");
+
+        map.on("click", "cells-fill", (e) => {
+          const f = e.features && e.features[0];
+          if (!f) return;
+
+          const id = String(f.properties?.id);
+          if (!id) return;
+
+          const isSelected = selectedIds.has(id);
+          if (isSelected) {
+            selectedIds.delete(id);
+            map.setFeatureState({ source: "cells", id: Number(id) }, { selected: false });
+          } else {
+            selectedIds.add(id);
+            map.setFeatureState({ source: "cells", id: Number(id) }, { selected: true });
+          }
+
+          recomputeSelectionSum();
+        });
+
+        // UI events
+        document.getElementById("citySelect").addEventListener("change", (ev) => {
+          const city = ev.target.value;
+          filterToCity(city);
+
+          // reset feature states by reloading city data, but we should also clear all states
+          // easiest: rebuild map source state by removing and readding source later, too heavy now
+          // for this first version, selection is cleared on city change.
+        });
+
+        document.getElementById("varSelect").addEventListener("change", (ev) => {
+          currentVar = ev.target.value;
+          recomputeSelectionSum();
+        });
+
+        document.getElementById("basemapSelect").addEventListener("change", (ev) => {
+          const key = ev.target.value;
+          const current = map.getStyle();
+
+          // garder les couches cells lors du changement de style
+          // MapLibre détruit layers et sources, il faut réinjecter après setStyle
+          map.setStyle(BASEMAPS[key]);
+
+          map.once("styledata", () => {
+            // réinjecter source + layers et remettre le city filter
+            map.addSource("cells", {
+              type: "geojson",
+              data: { type: "FeatureCollection", features: [] },
+              promoteId: "id"
+            });
+
+            map.addLayer({
+              id: "cells-fill",
+              type: "fill",
+              source: "cells",
+              paint: {
+                "fill-color": [
+                  "case",
+                  ["boolean", ["feature-state", "selected"], false],
+                  "#ffcc00",
+                  "#1f78ff"
+                ],
+                "fill-opacity": [
+                  "case",
+                  ["boolean", ["feature-state", "selected"], false],
+                  0.65,
+                  0.35
+                ]
+              }
+            });
+
+            map.addLayer({
+              id: "cells-outline",
+              type: "line",
+              source: "cells",
+              paint: {
+                "line-color": [
+                  "case",
+                  ["boolean", ["feature-state", "selected"], false],
+                  "#000000",
+                  "#003366"
+                ],
+                "line-width": [
+                  "case",
+                  ["boolean", ["feature-state", "selected"], false],
+                  2,
+                  1
+                ]
+              }
+            });
+
+            map.on("mouseenter", "cells-fill", () => map.getCanvas().style.cursor = "pointer");
+            map.on("mouseleave", "cells-fill", () => map.getCanvas().style.cursor = "");
+
+            map.on("click", "cells-fill", (e) => {
+              const f = e.features && e.features[0];
+              if (!f) return;
+              const id = String(f.properties?.id);
+              if (!id) return;
+
+              const isSelected = selectedIds.has(id);
+              if (isSelected) {
+                selectedIds.delete(id);
+                map.setFeatureState({ source: "cells", id: Number(id) }, { selected: false });
+              } else {
+                selectedIds.add(id);
+                map.setFeatureState({ source: "cells", id: Number(id) }, { selected: true });
+              }
+              recomputeSelectionSum();
+            });
+
+            // on réapplique la ville, et on clear la sélection
+            if (currentCity) filterToCity(currentCity);
+          });
+        });
+
+        document.getElementById("clearSelBtn").addEventListener("click", () => {
+          // on n'a pas une liste d'ids côté source ici, donc on reset seulement l'état connu
+          for (const id of selectedIds) {
+            map.setFeatureState({ source: "cells", id: Number(id) }, { selected: false });
+          }
+          selectedIds.clear();
+          recomputeSelectionSum();
+        });
+
+        // init affichage
+        filterToCity(currentCity);
+        recomputeSelectionSum();
+      });
+    }
+
+    init();
+  </script>
 </body>
 </html>
-
