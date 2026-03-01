@@ -713,16 +713,14 @@
   // Routes appear only after cells are selected
 
   function addLayers(map, state){
-    });
-
-    map.addSource("perimeters", { type:"geojson", data: APP.data.perimeters });
+        map.addSource("perimeters", { type:"geojson", data: APP.data.perimeters });
     map.addLayer({
       id: LAYERS.perimetersLine,
       type:"line",
       source:"perimeters",
       paint:{
         "line-color":"#111111",
-        "line-width":4,
+        "line-width": 6,
         "line-opacity":0.65
       }
     });
@@ -1498,21 +1496,14 @@ function sumSocioForIds(ids){
       updateUIAfterSelection();
     });
 
+
     // Basemap
     // Switching style resets custom layers, so we rebuild overlays after the new style loads.
     elBasemap.addEventListener("change", (e) => {
       const key = e.target.value;
       if(!BASEMAPS[key]) return;
 
-      const tasks = [
-        { map: APP.maps.mapA, state: APP.stateA, paneId: "A" },
-        { map: APP.maps.mapB, state: APP.stateB, paneId: "B" }
-      ];
-
-      for(const t of tasks){
-        const map = t.map;
-        const state = t.state;
-
+      const rebuildFor = (map, state, paneId) => {
         const center = map.getCenter();
         const zoom = map.getZoom();
         const bearing = map.getBearing();
@@ -1527,9 +1518,14 @@ function sumSocioForIds(ids){
         map.setStyle(BASEMAPS[key]);
 
         map.once("style.load", async () => {
+          // Re add sources and layers
           addLayers(map, state);
-          setupDraw(map, state);
 
+          // Re add tools and events
+          setupDraw(map, state);
+          bindInteractions(map, state);
+
+          // Restore view
           map.jumpTo({ center, zoom, bearing, pitch });
 
           // Restore selection visual state
@@ -1538,24 +1534,22 @@ function sumSocioForIds(ids){
           }
 
           // Restore choropleth and filters
-          setGridVisibilityForPane(t.paneId);
-          applyCityFiltersForPane(t.paneId);
+          setGridVisibilityForPane(paneId);
+          applyCityFiltersForPane(paneId);
 
           const f1 = Number(elFilter1.value) || 0;
-          if(f1 > 0) applyChoroplethForPane(t.paneId);
+          if(f1 > 0) applyChoroplethForPane(paneId);
 
-          await updateRoutesForPane(t.paneId);
-          renderResultsForPane(t.paneId);
+          await updateRoutesForPane(paneId);
+          renderResultsForPane(paneId);
           updateSelectionSummary();
         });
-      }
-    });
-await updateEverythingForPane(paneId);
       };
 
-      rebind(APP.maps.mapA, APP.stateA, "A", aCenter, aZoom);
-      rebind(APP.maps.mapB, APP.stateB, "B", bCenter, bZoom);
+      rebuildFor(APP.maps.mapA, APP.stateA, "A");
+      rebuildFor(APP.maps.mapB, APP.stateB, "B");
     });
+
   }
 
   init().catch(err => {
