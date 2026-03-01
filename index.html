@@ -1,88 +1,671 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Cells Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="utf-8" />
+<title>JiM project</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- MapLibre CSS -->
-  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 
-  <style>
-    body { margin: 0; padding: 0; }
-    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-  </style>
+<style>
+  :root{
+    --black:#0b0b0b;
+    --white:#ffffff;
+    --panel:#ffffff;
+    --shadow:rgba(0,0,0,0.18);
+  }
+
+  html, body { margin:0; height:100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+  #map { position:absolute; top:72px; bottom:0; width:100%; }
+
+  .topbar{
+    position:fixed;
+    top:0; left:0; right:0;
+    height:72px;
+    background:var(--black);
+    color:var(--white);
+    display:flex;
+    align-items:center;
+    padding:0 18px;
+    z-index:10;
+    box-sizing:border-box;
+    gap:16px;
+  }
+
+  .title{
+    font-weight:750;
+    font-size:14px;
+    line-height:1.2;
+    flex:1;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .logos{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-shrink:0;
+  }
+
+  .logos img{
+    height:40px;
+    width:auto;
+    display:block;
+    filter:grayscale(1);
+    opacity:0.95;
+  }
+
+  .panel{
+    position:absolute;
+    top:88px;
+    left:14px;
+    width:340px;
+    max-width:calc(100% - 28px);
+    background:var(--panel);
+    padding:14px;
+    border-radius:14px;
+    box-shadow:0 10px 26px var(--shadow);
+    z-index:6;
+    box-sizing:border-box;
+  }
+
+  .panel label{
+    display:block;
+    font-size:12px;
+    opacity:0.85;
+    margin:10px 0 6px 0;
+  }
+
+  select, button{
+    width:100%;
+    height:36px;
+    border-radius:10px;
+    border:1px solid rgba(0,0,0,0.18);
+    background:#fff;
+    padding:0 10px;
+    box-sizing:border-box;
+    font-size:13px;
+  }
+
+  button{
+    cursor:pointer;
+    background:#f6f6f6;
+    font-weight:700;
+  }
+
+  .row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-top:10px;
+  }
+
+  .chip{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background:#efefef;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    user-select:none;
+  }
+
+  .chip input{ margin:0; }
+
+  .kpi{
+    margin-top:12px;
+    background:#f5f5f5;
+    border:1px solid rgba(0,0,0,0.10);
+    padding:10px 12px;
+    border-radius:12px;
+  }
+
+  .kpi .big{
+    font-size:18px;
+    font-weight:800;
+  }
+
+  .kpi .small{
+    margin-top:4px;
+    font-size:12px;
+    opacity:0.8;
+  }
+
+  .hint{
+    margin-top:10px;
+    font-size:12px;
+    opacity:0.75;
+    line-height:1.35;
+  }
+</style>
 </head>
 
 <body>
+
+<div class="topbar">
+  <div class="title">JiM project - Measuring accessibility to services in the 15-Minute City</div>
+  <div class="logos">
+    <img src="assets/jim.png" alt="JiM">
+    <img src="assets/dut.png" alt="DUT Driving Urban Transitions">
+    <img src="assets/gemott.png" alt="GEMOTT">
+    <img src="assets/uab.png" alt="UAB">
+  </div>
+</div>
+
 <div id="map"></div>
 
+<div class="panel">
+  <label for="citySelect">Ville</label>
+  <select id="citySelect"></select>
+
+  <label for="varSelect">Variable à sommer (sur sélection)</label>
+  <select id="varSelect"></select>
+
+  <label for="basemapSelect">Fond de carte</label>
+  <select id="basemapSelect">
+    <option value="osm">OSM</option>
+    <option value="positron">CARTO Positron</option>
+  </select>
+
+  <div class="row">
+    <label class="chip"><input type="checkbox" id="hoverSelect"> Hover select</label>
+    <label class="chip"><input type="checkbox" id="hoverUnselect"> Hover unselect</label>
+  </div>
+
+  <div class="row">
+    <button id="clearBtn">Clear selection</button>
+  </div>
+
+  <div class="kpi">
+    <div class="big" id="sumValue">0</div>
+    <div class="small" id="sumMeta">Somme sur 0 polygones sélectionnés</div>
+  </div>
+
+  <div class="hint">
+    Clic: toggle sélection. Active Hover select pour "peindre" une sélection en passant la souris sur les polygones.
+    La somme est calculée uniquement sur la ville courante.
+  </div>
+</div>
+
 <script>
-  // Basemap OpenStreetMap raster
-  const style = {
-    version: 8,
-    sources: {
-      osm: {
-        type: "raster",
-        tiles: [
-          "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        ],
-        tileSize: 256,
-        attribution: "© OpenStreetMap contributors"
-      }
+  const CITY_VIEW = {
+    "Sabadell": { center:[2.11719, 41.54433], zoom:13 },
+    "Grenoble": { center:[5.72702902, 45.1595], zoom:10 }
+  };
+
+  const BASEMAPS = {
+    osm:{
+      version:8,
+      sources:{
+        base:{
+          type:"raster",
+          tiles:["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize:256,
+          attribution:"© OpenStreetMap contributors"
+        }
+      },
+      layers:[{ id:"base", type:"raster", source:"base" }]
     },
-    layers: [
-      {
-        id: "osm",
-        type: "raster",
-        source: "osm"
-      }
-    ]
+    positron:{
+      version:8,
+      sources:{
+        base:{
+          type:"raster",
+          tiles:[
+            "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+            "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+            "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+            "https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+          ],
+          tileSize:256,
+          attribution:"© OpenStreetMap contributors, © CARTO"
+        }
+      },
+      layers:[{ id:"base", type:"raster", source:"base" }]
+    }
   };
 
   const map = new maplibregl.Map({
-    container: "map",
-    style: style,
-    center: [2.137, 41.445],  // centre approximatif de ton bbox
-    zoom: 14
+    container:"map",
+    style:BASEMAPS.osm,
+    center:[2.13, 41.44],
+    zoom:12
   });
 
   map.addControl(new maplibregl.NavigationControl(), "top-right");
 
-  map.on("load", function () {
+  let allData = null;
+  let currentCity = null;
+  let currentVar = null;
 
-    // Charger ton GeoJSON
-    map.addSource("cells", {
-      type: "geojson",
-      data: "data/cells.geojson"
-    });
+  // On stocke toujours des clés String(properties.id)
+  const selectedIds = new Set();
 
-    // Couche polygones
-    map.addLayer({
-      id: "cells-fill",
-      type: "fill",
-      source: "cells",
-      paint: {
-        "fill-color": "#0077ff",
-        "fill-opacity": 0.4
+  const elCity = document.getElementById("citySelect");
+  const elVar = document.getElementById("varSelect");
+  const elBasemap = document.getElementById("basemapSelect");
+  const elHoverSelect = document.getElementById("hoverSelect");
+  const elHoverUnselect = document.getElementById("hoverUnselect");
+  const elSumValue = document.getElementById("sumValue");
+  const elSumMeta = document.getElementById("sumMeta");
+
+  function fmtNumber(x){
+    return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(x);
+  }
+
+  function setSumUI(sum, n){
+    elSumValue.textContent = fmtNumber(sum);
+    elSumMeta.textContent = `Somme sur ${n} polygones sélectionnés`;
+  }
+
+  function computeBBox(features){
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    function scan(coords){
+      for(const c of coords){
+        if(Array.isArray(c[0])) scan(c);
+        else{
+          const x = c[0], y = c[1];
+          if(x < minX) minX = x;
+          if(y < minY) minY = y;
+          if(x > maxX) maxX = x;
+          if(y > maxY) maxY = y;
+        }
       }
-    });
+    }
 
-    // Contours
-    map.addLayer({
-      id: "cells-outline",
-      type: "line",
-      source: "cells",
-      paint: {
-        "line-color": "#003366",
-        "line-width": 1
+    for(const f of features){
+      if(!f.geometry) continue;
+      scan(f.geometry.coordinates);
+    }
+
+    if(!isFinite(minX)) return null;
+    return [minX, minY, maxX, maxY];
+  }
+
+  function fitToFeatures(features){
+    const b = computeBBox(features);
+    if(!b) return;
+    map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, duration: 700 });
+  }
+
+  function clearSelection(){
+    for(const key of selectedIds){
+      const fid = Number(key);
+      if(Number.isFinite(fid)){
+        map.setFeatureState({ source:"cells", id: fid }, { selected:false });
       }
+    }
+    selectedIds.clear();
+    computeSum();
+  }
+
+  function computeSum(){
+    if(!allData || !currentCity || !currentVar){
+      setSumUI(0, 0);
+      return;
+    }
+
+    let sum = 0;
+    let n = 0;
+
+    for(const f of allData.features){
+      const city = String(f.properties?.city ?? "");
+      if(city !== String(currentCity)) continue;
+
+      const pid = f.properties?.id;
+      if(pid === null || pid === undefined) continue;
+
+      const key = String(pid);
+      if(!selectedIds.has(key)) continue;
+
+      const v = Number(f.properties?.[currentVar]);
+      if(!Number.isFinite(v)) continue;
+
+      sum += v;
+      n += 1;
+    }
+
+    setSumUI(sum, n);
+  }
+
+  function applyCityFilter(city){
+    currentCity = city;
+
+    // filtre sur l'affichage
+    map.setFilter("cells-fill", ["==", ["to-string", ["get", "city"]], String(city)]);
+    map.setFilter("cells-line", ["==", ["to-string", ["get", "city"]], String(city)]);
+
+    // reset sélection sur changement de ville
+    clearSelection();
+
+    // recentrage
+    const view = CITY_VIEW[city];
+    if(view){
+      map.flyTo({ center: view.center, zoom: view.zoom, duration: 900 });
+    }else{
+      // fallback: fit bbox sur la ville
+      const feats = allData.features.filter(f => String(f.properties?.city ?? "") === String(city));
+      fitToFeatures(feats);
+    }
+  }
+
+  function ensureHoverModesExclusive(changed){
+    // Si l'utilisateur coche l'un, on décoche l'autre
+    if(changed === "select" && elHoverSelect.checked) elHoverUnselect.checked = false;
+    if(changed === "unselect" && elHoverUnselect.checked) elHoverSelect.checked = false;
+  }
+
+  async function init(){
+    const res = await fetch("data/cells.geojson");
+    allData = await res.json();
+
+    // villes
+    const cities = Array.from(new Set(allData.features
+      .map(f => String(f.properties?.city ?? ""))
+      .filter(x => x.length > 0)
+    )).sort();
+
+    elCity.innerHTML = cities.map(c => `<option value="${c}">${c}</option>`).join("");
+
+    // variables numériques candidates
+    const sampleProps = allData.features[0]?.properties || {};
+    const ignore = new Set(["city", "geom"]);
+    const numericCandidates = Object.keys(sampleProps)
+      .filter(k => !ignore.has(k))
+      .filter(k => {
+        const v = sampleProps[k];
+        return typeof v === "number" || (typeof v === "string" && v !== "" && !isNaN(Number(v)));
+      })
+      .sort();
+
+    elVar.innerHTML = numericCandidates.map(v => `<option value="${v}">${v}</option>`).join("");
+
+    currentCity = cities[0] || null;
+    currentVar = numericCandidates.includes("total_pop") ? "total_pop" : (numericCandidates[0] || null);
+
+    if(currentCity) elCity.value = currentCity;
+    if(currentVar) elVar.value = currentVar;
+
+    map.on("load", () => {
+      map.addSource("cells", {
+        type:"geojson",
+        data: allData,
+        promoteId: "id"
+      });
+
+      map.addLayer({
+        id:"cells-fill",
+        type:"fill",
+        source:"cells",
+        paint:{
+          "fill-color":[
+            "case",
+            ["boolean", ["feature-state","selected"], false],
+            "#ffcc00",
+            "#1f78ff"
+          ],
+          "fill-opacity":[
+            "case",
+            ["boolean", ["feature-state","selected"], false],
+            0.70,
+            0.35
+          ]
+        }
+      });
+
+      map.addLayer({
+        id:"cells-line",
+        type:"line",
+        source:"cells",
+        paint:{
+          "line-color":[
+            "case",
+            ["boolean", ["feature-state","selected"], false],
+            "#000000",
+            "#003366"
+          ],
+          "line-width":[
+            "case",
+            ["boolean", ["feature-state","selected"], false],
+            2,
+            1
+          ]
+        }
+      });
+
+      map.on("mouseenter","cells-fill",()=>{ map.getCanvas().style.cursor="pointer"; });
+      map.on("mouseleave","cells-fill",()=>{ map.getCanvas().style.cursor=""; });
+
+      // clic sélection
+      map.on("click","cells-fill",(e)=>{
+        const f = e.features && e.features[0];
+        if(!f) return;
+
+        const pid = f.properties?.id;
+        if(pid === null || pid === undefined) return;
+
+        const key = String(pid);
+        const fid = Number(pid);
+
+        if(!Number.isFinite(fid)) return;
+
+        if(selectedIds.has(key)){
+          selectedIds.delete(key);
+          map.setFeatureState({ source:"cells", id: fid }, { selected:false });
+        }else{
+          selectedIds.add(key);
+          map.setFeatureState({ source:"cells", id: fid }, { selected:true });
+        }
+
+        computeSum();
+      });
+
+      // hover "peinture"
+      let lastHoverKey = null;
+
+      map.on("mousemove","cells-fill",(e)=>{
+        const f = e.features && e.features[0];
+        if(!f) return;
+
+        const pid = f.properties?.id;
+        if(pid === null || pid === undefined) return;
+
+        const key = String(pid);
+        if(key === lastHoverKey) return;
+        lastHoverKey = key;
+
+        const fid = Number(pid);
+        if(!Number.isFinite(fid)) return;
+
+        if(elHoverSelect.checked){
+          if(!selectedIds.has(key)){
+            selectedIds.add(key);
+            map.setFeatureState({ source:"cells", id: fid }, { selected:true });
+            computeSum();
+          }
+        }
+
+        if(elHoverUnselect.checked){
+          if(selectedIds.has(key)){
+            selectedIds.delete(key);
+            map.setFeatureState({ source:"cells", id: fid }, { selected:false });
+            computeSum();
+          }
+        }
+      });
+
+      map.on("mouseleave","cells-fill",()=>{
+        lastHoverKey = null;
+      });
+
+      // init ville
+      if(currentCity) applyCityFilter(currentCity);
+      computeSum();
     });
 
-  });
+    // UI events
+    elCity.addEventListener("change",(e)=>{
+      applyCityFilter(e.target.value);
+    });
+
+    elVar.addEventListener("change",(e)=>{
+      currentVar = e.target.value;
+      computeSum();
+    });
+
+    elHoverSelect.addEventListener("change", ()=>{
+      ensureHoverModesExclusive("select");
+    });
+
+    elHoverUnselect.addEventListener("change", ()=>{
+      ensureHoverModesExclusive("unselect");
+    });
+
+    document.getElementById("clearBtn").addEventListener("click", clearSelection);
+
+    // Basemap: pour un premier essai, on ne change que le style, puis on recharge la couche
+    elBasemap.addEventListener("change",(e)=>{
+      const key = e.target.value;
+
+      // Sauvegarde état
+      const city = currentCity;
+      const varName = currentVar;
+      const selected = new Set(selectedIds);
+
+      map.setStyle(BASEMAPS[key]);
+
+      map.once("styledata", ()=>{
+        // réinjecter source + layers
+        map.addSource("cells", { type:"geojson", data: allData, promoteId:"id" });
+
+        map.addLayer({
+          id:"cells-fill",
+          type:"fill",
+          source:"cells",
+          paint:{
+            "fill-color":[
+              "case",
+              ["boolean", ["feature-state","selected"], false],
+              "#ffcc00",
+              "#1f78ff"
+            ],
+            "fill-opacity":[
+              "case",
+              ["boolean", ["feature-state","selected"], false],
+              0.70,
+              0.35
+            ]
+          }
+        });
+
+        map.addLayer({
+          id:"cells-line",
+          type:"line",
+          source:"cells",
+          paint:{
+            "line-color":[
+              "case",
+              ["boolean", ["feature-state","selected"], false],
+              "#000000",
+              "#003366"
+            ],
+            "line-width":[
+              "case",
+              ["boolean", ["feature-state","selected"], false],
+              2,
+              1
+            ]
+          }
+        });
+
+        map.on("mouseenter","cells-fill",()=>{ map.getCanvas().style.cursor="pointer"; });
+        map.on("mouseleave","cells-fill",()=>{ map.getCanvas().style.cursor=""; });
+
+        // rebind handlers (simple version)
+        map.on("click","cells-fill",(e)=>{
+          const f = e.features && e.features[0];
+          if(!f) return;
+          const pid = f.properties?.id;
+          if(pid === null || pid === undefined) return;
+          const key2 = String(pid);
+          const fid2 = Number(pid);
+          if(!Number.isFinite(fid2)) return;
+
+          if(selectedIds.has(key2)){
+            selectedIds.delete(key2);
+            map.setFeatureState({ source:"cells", id: fid2 }, { selected:false });
+          }else{
+            selectedIds.add(key2);
+            map.setFeatureState({ source:"cells", id: fid2 }, { selected:true });
+          }
+          computeSum();
+        });
+
+        let lastHoverKey2 = null;
+        map.on("mousemove","cells-fill",(e)=>{
+          const f = e.features && e.features[0];
+          if(!f) return;
+
+          const pid = f.properties?.id;
+          if(pid === null || pid === undefined) return;
+
+          const key2 = String(pid);
+          if(key2 === lastHoverKey2) return;
+          lastHoverKey2 = key2;
+
+          const fid2 = Number(pid);
+          if(!Number.isFinite(fid2)) return;
+
+          if(elHoverSelect.checked){
+            if(!selectedIds.has(key2)){
+              selectedIds.add(key2);
+              map.setFeatureState({ source:"cells", id: fid2 }, { selected:true });
+              computeSum();
+            }
+          }
+          if(elHoverUnselect.checked){
+            if(selectedIds.has(key2)){
+              selectedIds.delete(key2);
+              map.setFeatureState({ source:"cells", id: fid2 }, { selected:false });
+              computeSum();
+            }
+          }
+        });
+
+        map.on("mouseleave","cells-fill",()=>{
+          lastHoverKey2 = null;
+        });
+
+        // restore état
+        currentCity = city;
+        currentVar = varName;
+
+        // réappliquer filtre ville
+        if(currentCity) applyCityFilter(currentCity);
+
+        // restore selection
+        selectedIds.clear();
+        for(const k of selected) selectedIds.add(k);
+        for(const k of selectedIds){
+          const fid = Number(k);
+          if(Number.isFinite(fid)){
+            map.setFeatureState({ source:"cells", id: fid }, { selected:true });
+          }
+        }
+
+        computeSum();
+      });
+    });
+  }
+
+  init();
 </script>
 
 </body>
 </html>
-

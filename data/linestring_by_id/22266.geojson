@@ -1,0 +1,29 @@
+{
+"type": "FeatureCollection",
+"name": "22266",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-05,
+"features": [
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "biblioteca_8", "distance_input": "0.631" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.12077, 41.53295 ], [ 2.12094, 41.53278 ], [ 2.12198, 41.53079 ], [ 2.12016, 41.53006 ], [ 2.11968, 41.52993 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "cinema_6", "distance_input": "1.302" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11634, 41.54235 ], [ 2.11241, 41.54129 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "elementary school_33", "distance_input": "0.244" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11976, 41.53496 ], [ 2.11978, 41.53528 ], [ 2.12106, 41.53559 ], [ 2.12118, 41.53566 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "local grocery store_42", "distance_input": "0.245" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11914, 41.53634 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "pharmacy_97", "distance_input": "0.299" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.12077, 41.53295 ], [ 2.12094, 41.53278 ], [ 2.12113, 41.53241 ], [ 2.12101, 41.53238 ], [ 2.12129, 41.53183 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "pre-school_102", "distance_input": "0.244" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11976, 41.53496 ], [ 2.11978, 41.53528 ], [ 2.12106, 41.53559 ], [ 2.12118, 41.53566 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "primary health care provider_22", "distance_input": "0.225" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11922, 41.53617 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "supermarket_113", "distance_input": "0.228" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11931, 41.536 ], [ 2.11905, 41.53592 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "biblioteca_8", "distance_input": "0.631" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.12077, 41.53295 ], [ 2.12094, 41.53278 ], [ 2.12198, 41.53079 ], [ 2.12016, 41.53006 ], [ 2.11968, 41.52993 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "cinema_6", "distance_input": "1.302" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11634, 41.54235 ], [ 2.11241, 41.54129 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "elementary school_33", "distance_input": "0.244" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11976, 41.53496 ], [ 2.11978, 41.53528 ], [ 2.12106, 41.53559 ], [ 2.12118, 41.53566 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "local grocery store_42", "distance_input": "0.245" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11914, 41.53634 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "pharmacy_97", "distance_input": "0.299" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.12077, 41.53295 ], [ 2.12094, 41.53278 ], [ 2.12113, 41.53241 ], [ 2.12101, 41.53238 ], [ 2.12129, 41.53183 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "pre-school_102", "distance_input": "0.244" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11976, 41.53496 ], [ 2.11978, 41.53528 ], [ 2.12106, 41.53559 ], [ 2.12118, 41.53566 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "primary health care provider_22", "distance_input": "0.225" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11922, 41.53617 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "supermarket_113", "distance_input": "0.228" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11931, 41.536 ], [ 2.11905, 41.53592 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "local grocery store_42", "distance_input": "0.245" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11914, 41.53634 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "pharmacy_97", "distance_input": "0.299" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.12077, 41.53295 ], [ 2.12094, 41.53278 ], [ 2.12113, 41.53241 ], [ 2.12101, 41.53238 ], [ 2.12129, 41.53183 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "pre-school_102", "distance_input": "0.244" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11976, 41.53496 ], [ 2.11978, 41.53528 ], [ 2.12106, 41.53559 ], [ 2.12118, 41.53566 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "primary health care provider_22", "distance_input": "0.225" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11922, 41.53617 ] ] } },
+{ "type": "Feature", "properties": { "id": "22266", "id_facility": "supermarket_113", "distance_input": "0.228" }, "geometry": { "type": "LineString", "coordinates": [ [ 2.12008, 41.53432 ], [ 2.11931, 41.536 ], [ 2.11905, 41.53592 ] ] } }
+]
+}
