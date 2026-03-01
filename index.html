@@ -461,11 +461,14 @@
     return new Intl.NumberFormat("en-GB", { style:"currency", currency:"EUR", maximumFractionDigits: 0 }).format(x);
   }
 
-  // Ensure hover select and hover unselect cannot be enabled at the same time
 
-  function ensureHoverModesExclusive(changed){
-    if(changed === "select" && elHoverSelect.checked) elHoverUnselect.checked = false;
-    if(changed === "unselect" && elHoverUnselect.checked) elHoverSelect.checked = false;
+
+  // Socio data helper
+  // socio_economic_variables.json stores COUNTS per grid cell, and the population field can be named in a few ways depending on export.
+  function getTotalPop(row){
+    const v = row ? (row.total_pop ?? row.tot_pop ?? row.totalPop ?? row.totPop) : undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
   }
 
   // Build the legend HTML from TIME_CATS
@@ -710,11 +713,6 @@
   // Routes appear only after cells are selected
 
   function addLayers(map, state){
-    const pinUri = makePinDataURI();
-
-    map.loadImage(pinUri, (err, image) => {
-      if(err) return;
-      if(!map.hasImage("pin")) map.addImage("pin", image, { sdf:false });
     });
 
     map.addSource("perimeters", { type:"geojson", data: APP.data.perimeters });
@@ -724,7 +722,7 @@
       source:"perimeters",
       paint:{
         "line-color":"#111111",
-        "line-width":3,
+        "line-width":4,
         "line-opacity":0.65
       }
     });
@@ -780,22 +778,23 @@
     });
 
     map.addSource("facilities", { type:"geojson", data: APP.data.facilities });
+
+    // Facilities are rendered as circles (reliable across browsers and avoids missing icon issues)
+    // Tooltip is handled in bindInteractions (mousemove on this layer)
     map.addLayer({
       id: LAYERS.facilitiesSym,
-      type:"symbol",
+      type:"circle",
       source:"facilities",
-      layout:{
-        "icon-image":"pin",
-        "icon-size":0.85,
-        "icon-allow-overlap": true,
-        "icon-ignore-placement": true
+      paint:{
+        "circle-radius":5,
+        "circle-color":"#111111",
+        "circle-opacity":0.9,
+        "circle-stroke-color":"#ffffff",
+        "circle-stroke-width":1.2
       },
-      paint:{},
+      layout:{ visibility:"none" }
     });
-
-    map.setLayoutProperty(LAYERS.facilitiesSym, "visibility", "none");
-
-    map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", features: [] } });
+map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", features: [] } });
     map.addLayer({
       id: LAYERS.routesLine,
       type:"line",
@@ -1117,6 +1116,7 @@
 
 function sumSocioForIds(ids){
     let totalPop = 0;
+    let matchedRows = 0;
 
     let women = 0;
     let men = 0;
@@ -1135,8 +1135,9 @@ function sumSocioForIds(ids){
       const row = APP.data.socioById.get(String(id));
       if(!row) continue;
 
-      const tp = Number(row.total_pop);
+      const tp = getTotalPop(row);
       if(!Number.isFinite(tp)) continue;
+      matchedRows += 1;
       totalPop += tp;
 
       const w = Number(row.dones);
@@ -1176,7 +1177,7 @@ function sumSocioForIds(ids){
 
     const income = incomeWeight > 0 ? incomeWeightedSum / incomeWeight : null;
 
-    return { totalPop, women, men, u5, u15, age75, unemployed, poor60, income };
+    return { totalPop, women, men, u5, u15, age75, unemployed, poor60, income, matchedRows };
   }
 
   function computePopulationOver15(state){
@@ -1186,7 +1187,7 @@ function sumSocioForIds(ids){
       if(!(Number.isFinite(cat) && cat >= 4)) continue;
       const row = APP.data.socioById.get(String(id));
       if(!row) continue;
-      const tp = Number(row.total_pop);
+      const tp = getTotalPop(row);
       if(Number.isFinite(tp)) popOver15 += tp;
     }
     return popOver15;
@@ -1200,7 +1201,7 @@ function sumSocioForIds(ids){
       const idCity = APP.data.idToCity.get(String(id));
       if(idCity && String(idCity) !== String(city)) continue;
 
-      const tp = Number(row.total_pop);
+      const tp = getTotalPop(row);
       const inc = Number(row.renda_mitjana_UC_2023);
       if(!Number.isFinite(tp) || !Number.isFinite(inc)) continue;
       wSum += tp * inc;
@@ -1235,6 +1236,14 @@ function sumSocioForIds(ids){
     }
 
     const sums = sumSocioForIds(state.selectedIds);
+
+    if((sums.matchedRows || 0) === 0){
+      const msg = "No socio economic data match the selected grid ids. Check that socio_economic_variables.json uses the same id as grids.geojson.";
+      if(paneId === "A") elResultsAText.textContent = msg;
+      else elResultsBText.textContent = msg;
+      return;
+    }
+
     const popOver15 = computePopulationOver15(state);
 
     const tp = sums.totalPop || 0;
@@ -1278,7 +1287,11 @@ function sumSocioForIds(ids){
     const sums = sumSocioForIds(state.selectedIds);
 
     elSelCells.textContent = fmtInt(state.selectedIds.size);
-    elSelMeta.textContent = `Selected cells, ${fmtInt(sums.totalPop || 0)} people (active pane)`;
+    if(state.selectedIds.size > 0 && (sums.matchedRows || 0) === 0){
+      elSelMeta.textContent = `Selected cells, NA people (no socio match, check ids)`;
+    }else{
+      elSelMeta.textContent = `Selected cells, ${fmtInt(sums.totalPop || 0)} people (active pane)`;
+    }
   }
 
   // High level update for one pane
@@ -1475,10 +1488,6 @@ function sumSocioForIds(ids){
       clearSelectionForPane("B");
       await updateEverythingAllPanes();
     });
-
-    elHoverSelect.addEventListener("change", () => { ensureHoverModesExclusive("select"); });
-    elHoverUnselect.addEventListener("change", () => { ensureHoverModesExclusive("unselect"); });
-
     document.getElementById("polyBtn").addEventListener("click", () => {
       selectByPolygon();
     });
@@ -1490,26 +1499,58 @@ function sumSocioForIds(ids){
     });
 
     // Basemap
+    // Switching style resets custom layers, so we rebuild overlays after the new style loads.
     elBasemap.addEventListener("change", (e) => {
       const key = e.target.value;
+      if(!BASEMAPS[key]) return;
 
-      const aCenter = APP.maps.mapA.getCenter();
-      const aZoom = APP.maps.mapA.getZoom();
-      const bCenter = APP.maps.mapB.getCenter();
-      const bZoom = APP.maps.mapB.getZoom();
+      const tasks = [
+        { map: APP.maps.mapA, state: APP.stateA, paneId: "A" },
+        { map: APP.maps.mapB, state: APP.stateB, paneId: "B" }
+      ];
 
-      APP.maps.mapA.setStyle(BASEMAPS[key]);
-      APP.maps.mapB.setStyle(BASEMAPS[key]);
+      for(const t of tasks){
+        const map = t.map;
+        const state = t.state;
 
-      const rebind = async (map, state, paneId, center, zoom) => {
-        await new Promise((resolve) => map.once("styledata", resolve));
-        addLayers(map, state);
-        setupDraw(map, state);
-        bindInteractions(map, state);
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        const bearing = map.getBearing();
+        const pitch = map.getPitch();
 
-        map.jumpTo({ center, zoom });
+        // Remove Draw control before changing the style to avoid duplicated layers
+        if(state.draw){
+          try{ map.removeControl(state.draw); }catch(err){}
+          state.draw = null;
+        }
 
-        await updateEverythingForPane(paneId);
+        map.setStyle(BASEMAPS[key]);
+
+        map.once("style.load", async () => {
+          addLayers(map, state);
+          setupDraw(map, state);
+
+          map.jumpTo({ center, zoom, bearing, pitch });
+
+          // Restore selection visual state
+          for(const id of state.selectedIds){
+            map.setFeatureState({ source:"grids", id: String(id) }, { selected:true });
+          }
+
+          // Restore choropleth and filters
+          setGridVisibilityForPane(t.paneId);
+          applyCityFiltersForPane(t.paneId);
+
+          const f1 = Number(elFilter1.value) || 0;
+          if(f1 > 0) applyChoroplethForPane(t.paneId);
+
+          await updateRoutesForPane(t.paneId);
+          renderResultsForPane(t.paneId);
+          updateSelectionSummary();
+        });
+      }
+    });
+await updateEverythingForPane(paneId);
       };
 
       rebind(APP.maps.mapA, APP.stateA, "A", aCenter, aZoom);
