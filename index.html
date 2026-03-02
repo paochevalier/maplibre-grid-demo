@@ -5,6 +5,10 @@
 <title>JiM project</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+<link rel="icon" type="image/png" href="assets/jim.png" />
+<link rel="shortcut icon" type="image/png" href="assets/jim.png" />
+<link rel="apple-touch-icon" href="assets/jim.png" />
+
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 
@@ -664,25 +668,36 @@
   // Create the two MapLibre map instances
   // Pane B can be hidden when compare mode is off
 
-  function makeMaps(){
-    const mapA = new maplibregl.Map({
-      container:"mapA",
-      style:BASEMAPS.osm,
-      center:[2.13, 41.44],
-      zoom:12
-    });
+  function makeMaps(basemapKey = "osm", viewA = null, viewB = null){
+  const style = (BASEMAPS && BASEMAPS[basemapKey]) ? BASEMAPS[basemapKey] : BASEMAPS.osm;
 
-    const mapB = new maplibregl.Map({
-      container:"mapB",
-      style:BASEMAPS.osm,
-      center:[2.13, 41.44],
-      zoom:12
-    });
+  const defaultView = { center:[2.13, 41.44], zoom:12, bearing:0, pitch:0 };
+  const vA = Object.assign({}, defaultView, viewA || {});
+  const vB = Object.assign({}, defaultView, viewB || {});
 
-    mapA.addControl(new maplibregl.NavigationControl(), "top-right");
-    mapB.addControl(new maplibregl.NavigationControl(), "top-right");
+  const mapA = new maplibregl.Map({
+    container:"mapA",
+    style,
+    center:vA.center,
+    zoom:vA.zoom,
+    bearing:vA.bearing,
+    pitch:vA.pitch
+  });
 
-    return { mapA, mapB };
+  const mapB = new maplibregl.Map({
+    container:"mapB",
+    style,
+    center:vB.center,
+    zoom:vB.zoom,
+    bearing:vB.bearing,
+    pitch:vB.pitch
+  });
+
+  mapA.addControl(new maplibregl.NavigationControl(), "top-right");
+  mapB.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  return { mapA, mapB };
+};
   }
 
   const APP = {
@@ -1598,7 +1613,8 @@ function sumSocioForIds(ids){
     elCityB.innerHTML = cities.map(c => `<option value="${c}">${c}</option>`).join("");
 
     // Create maps
-    APP.maps = makeMaps();
+    const initialBasemapKey = (elBasemap && elBasemap.value) ? elBasemap.value : "osm";
+    APP.maps = makeMaps(initialBasemapKey);
     APP.stateA = newPaneState("A");
     APP.stateB = newPaneState("B");
 
@@ -1694,75 +1710,82 @@ function sumSocioForIds(ids){
     });
 
 
-    // Basemap
-    // Switching style resets custom layers, so we rebuild overlays after the new style loads.
-    elBasemap.addEventListener("change", async (e) => {
-      const key = e.target.value;
-      if(!BASEMAPS[key]) return;
+// Basemap
+// Best stability: destroy and recreate the map objects when the basemap changes.
+// map.setStyle can be fragile because it clears custom sources and layers and may leave the app in a half rebuilt state.
+elBasemap.addEventListener("change", async (e) => {
+  const key = e.target.value;
+  if(!BASEMAPS[key]) return;
 
-      // Token to ignore stale rebuilds if the user changes basemap multiple times quickly
-      const token = ++APP.basemapToken;
+  const token = ++APP.basemapToken;
+  elBasemap.disabled = true;
 
-      // Disable the dropdown while rebuilding to avoid overlapping setStyle calls
-      elBasemap.disabled = true;
+  const snapA = {
+    center: APP.maps.mapA.getCenter().toArray(),
+    zoom: APP.maps.mapA.getZoom(),
+    bearing: APP.maps.mapA.getBearing(),
+    pitch: APP.maps.mapA.getPitch()
+  };
 
-      const rebuildFor = (map, state, paneId) => new Promise((resolve) => {
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const bearing = map.getBearing();
-        const pitch = map.getPitch();
+  const snapB = {
+    center: APP.maps.mapB.getCenter().toArray(),
+    zoom: APP.maps.mapB.getZoom(),
+    bearing: APP.maps.mapB.getBearing(),
+    pitch: APP.maps.mapB.getPitch()
+  };
 
-        // Remove Draw control before changing the style to avoid duplicated layers
-        if(state.draw){
-          try{ map.removeControl(state.draw); }catch(err){}
-          state.draw = null;
-        }
+  // Clear popups (they are attached to a specific map instance)
+  try{ APP.stateA.popupGrid.remove(); }catch(err){}
+  try{ APP.stateA.popupFacility.remove(); }catch(err){}
+  try{ APP.stateB.popupGrid.remove(); }catch(err){}
+  try{ APP.stateB.popupFacility.remove(); }catch(err){}
 
-        map.setStyle(BASEMAPS[key]);
+  // Remove old maps entirely
+  try{ APP.maps.mapA.remove(); }catch(err){}
+  try{ APP.maps.mapB.remove(); }catch(err){}
 
-        map.once("style.load", async () => {
-          if(token !== APP.basemapToken){
-            resolve();
-            return;
-          }
+  // Reset per pane flags so we can bind events again on the new maps
+  APP.stateA.draw = null;
+  APP.stateB.draw = null;
+  APP.stateA.eventsBound = false;
+  APP.stateB.eventsBound = false;
 
-          // Re add sources and layers (custom overlays)
-          addLayers(map, state);
+  // Recreate maps with the new basemap while preserving the current view
+  APP.maps = makeMaps(key, snapA, snapB);
 
-          // Re add Draw tool (events were bound only once and will work with the recreated layers)
-          setupDraw(map, state);
+  // Wait for both maps to load before adding custom layers
+  await new Promise((resolve) => {
+    let n = 0;
+    function done(){ n += 1; if(n === 2) resolve(); }
+    APP.maps.mapA.on("load", done);
+    APP.maps.mapB.on("load", done);
+  });
 
-          // Restore view
-          map.jumpTo({ center, zoom, bearing, pitch });
+  // Re add overlays, draw tool, and interactions
+  addLayers(APP.maps.mapA, APP.stateA);
+  addLayers(APP.maps.mapB, APP.stateB);
 
-          // Restore selection visual state
-          for(const id of state.selectedIds){
-            map.setFeatureState({ source:"grids", id: String(id) }, { selected:true });
-          }
+  setupDraw(APP.maps.mapA, APP.stateA);
+  setupDraw(APP.maps.mapB, APP.stateB);
 
-          // Restore choropleth and filters
-          setGridVisibilityForPane(paneId);
-          applyCityFiltersForPane(paneId);
+  bindInteractions(APP.maps.mapA, APP.stateA);
+  bindInteractions(APP.maps.mapB, APP.stateB);
 
-          const f1 = Number(elFilter1.value) || 0;
-          if(f1 > 0) applyChoroplethForPane(paneId);
+  // Restore selected state (feature state is per map instance)
+  for(const id of APP.stateA.selectedIds){
+    APP.maps.mapA.setFeatureState({ source:"grids", id: String(id) }, { selected:true });
+  }
+  for(const id of APP.stateB.selectedIds){
+    APP.maps.mapB.setFeatureState({ source:"grids", id: String(id) }, { selected:true });
+  }
 
-          updateSelectionGeometryForPane(paneId);
-          await updateRoutesForPane(paneId);
-          renderResultsForPane(paneId);
-          updateSelectionSummary();
+  // Restore filters, choropleth, selection polygon and routes
+  await updateEverythingAllPanes();
 
-          resolve();
-        });
-      });
-
-      await Promise.all([
-        rebuildFor(APP.maps.mapA, APP.stateA, "A"),
-        rebuildFor(APP.maps.mapB, APP.stateB, "B")
-      ]);
-
-      if(token === APP.basemapToken) elBasemap.disabled = false;
-    });
+  if(token === APP.basemapToken){
+    elBasemap.disabled = false;
+  }
+});
 
   }
 
