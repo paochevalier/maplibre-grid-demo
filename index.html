@@ -5,8 +5,8 @@
 <title>JiM project</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+
 <link rel="icon" type="image/png" href="assets/jim.png" />
-<link rel="shortcut icon" type="image/png" href="assets/jim.png" />
 <link rel="apple-touch-icon" href="assets/jim.png" />
 
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
@@ -277,13 +277,6 @@
 
   <label for="filter2Select">Filter level 2</label>
   <select id="filter2Select" disabled></select>
-
-  <label for="basemapSelect">Basemap</label>
-  <select id="basemapSelect">
-    <option value="osm">OSM</option>
-    <option value="positron">CARTO Positron</option>
-  </select>
-
   <div class="row">
     <div class="chip">
       <input type="checkbox" id="showPaths">
@@ -455,8 +448,7 @@
   const elCityBWrap = document.getElementById("cityBWrap");
   const elFilter1 = document.getElementById("filter1Select");
   const elFilter2 = document.getElementById("filter2Select");
-  const elBasemap = document.getElementById("basemapSelect");
-  const elSelCells = document.getElementById("selCells");
+const elSelCells = document.getElementById("selCells");
   const elSelMeta = document.getElementById("selMeta");
 
   const elShowPaths = document.getElementById("showPaths");
@@ -668,36 +660,25 @@
   // Create the two MapLibre map instances
   // Pane B can be hidden when compare mode is off
 
-  function makeMaps(basemapKey = "osm", viewA = null, viewB = null){
-  const style = (BASEMAPS && BASEMAPS[basemapKey]) ? BASEMAPS[basemapKey] : BASEMAPS.osm;
+  function makeMaps(){
+    const mapA = new maplibregl.Map({
+      container:"mapA",
+      style:BASEMAPS.osm,
+      center:[2.13, 41.44],
+      zoom:12
+    });
 
-  const defaultView = { center:[2.13, 41.44], zoom:12, bearing:0, pitch:0 };
-  const vA = Object.assign({}, defaultView, viewA || {});
-  const vB = Object.assign({}, defaultView, viewB || {});
+    const mapB = new maplibregl.Map({
+      container:"mapB",
+      style:BASEMAPS.osm,
+      center:[2.13, 41.44],
+      zoom:12
+    });
 
-  const mapA = new maplibregl.Map({
-    container:"mapA",
-    style,
-    center:vA.center,
-    zoom:vA.zoom,
-    bearing:vA.bearing,
-    pitch:vA.pitch
-  });
+    mapA.addControl(new maplibregl.NavigationControl(), "top-right");
+    mapB.addControl(new maplibregl.NavigationControl(), "top-right");
 
-  const mapB = new maplibregl.Map({
-    container:"mapB",
-    style,
-    center:vB.center,
-    zoom:vB.zoom,
-    bearing:vB.bearing,
-    pitch:vB.pitch
-  });
-
-  mapA.addControl(new maplibregl.NavigationControl(), "top-right");
-  mapB.addControl(new maplibregl.NavigationControl(), "top-right");
-
-  return { mapA, mapB };
-};
+    return { mapA, mapB };
   }
 
   const APP = {
@@ -1613,8 +1594,7 @@ function sumSocioForIds(ids){
     elCityB.innerHTML = cities.map(c => `<option value="${c}">${c}</option>`).join("");
 
     // Create maps
-    const initialBasemapKey = (elBasemap && elBasemap.value) ? elBasemap.value : "osm";
-    APP.maps = makeMaps(initialBasemapKey);
+    APP.maps = makeMaps();
     APP.stateA = newPaneState("A");
     APP.stateB = newPaneState("B");
 
@@ -1710,82 +1690,7 @@ function sumSocioForIds(ids){
     });
 
 
-// Basemap
-// Best stability: destroy and recreate the map objects when the basemap changes.
-// map.setStyle can be fragile because it clears custom sources and layers and may leave the app in a half rebuilt state.
-elBasemap.addEventListener("change", async (e) => {
-  const key = e.target.value;
-  if(!BASEMAPS[key]) return;
 
-  const token = ++APP.basemapToken;
-  elBasemap.disabled = true;
-
-  const snapA = {
-    center: APP.maps.mapA.getCenter().toArray(),
-    zoom: APP.maps.mapA.getZoom(),
-    bearing: APP.maps.mapA.getBearing(),
-    pitch: APP.maps.mapA.getPitch()
-  };
-
-  const snapB = {
-    center: APP.maps.mapB.getCenter().toArray(),
-    zoom: APP.maps.mapB.getZoom(),
-    bearing: APP.maps.mapB.getBearing(),
-    pitch: APP.maps.mapB.getPitch()
-  };
-
-  // Clear popups (they are attached to a specific map instance)
-  try{ APP.stateA.popupGrid.remove(); }catch(err){}
-  try{ APP.stateA.popupFacility.remove(); }catch(err){}
-  try{ APP.stateB.popupGrid.remove(); }catch(err){}
-  try{ APP.stateB.popupFacility.remove(); }catch(err){}
-
-  // Remove old maps entirely
-  try{ APP.maps.mapA.remove(); }catch(err){}
-  try{ APP.maps.mapB.remove(); }catch(err){}
-
-  // Reset per pane flags so we can bind events again on the new maps
-  APP.stateA.draw = null;
-  APP.stateB.draw = null;
-  APP.stateA.eventsBound = false;
-  APP.stateB.eventsBound = false;
-
-  // Recreate maps with the new basemap while preserving the current view
-  APP.maps = makeMaps(key, snapA, snapB);
-
-  // Wait for both maps to load before adding custom layers
-  await new Promise((resolve) => {
-    let n = 0;
-    function done(){ n += 1; if(n === 2) resolve(); }
-    APP.maps.mapA.on("load", done);
-    APP.maps.mapB.on("load", done);
-  });
-
-  // Re add overlays, draw tool, and interactions
-  addLayers(APP.maps.mapA, APP.stateA);
-  addLayers(APP.maps.mapB, APP.stateB);
-
-  setupDraw(APP.maps.mapA, APP.stateA);
-  setupDraw(APP.maps.mapB, APP.stateB);
-
-  bindInteractions(APP.maps.mapA, APP.stateA);
-  bindInteractions(APP.maps.mapB, APP.stateB);
-
-  // Restore selected state (feature state is per map instance)
-  for(const id of APP.stateA.selectedIds){
-    APP.maps.mapA.setFeatureState({ source:"grids", id: String(id) }, { selected:true });
-  }
-  for(const id of APP.stateB.selectedIds){
-    APP.maps.mapB.setFeatureState({ source:"grids", id: String(id) }, { selected:true });
-  }
-
-  // Restore filters, choropleth, selection polygon and routes
-  await updateEverythingAllPanes();
-
-  if(token === APP.basemapToken){
-    elBasemap.disabled = false;
-  }
-});
 
   }
 
