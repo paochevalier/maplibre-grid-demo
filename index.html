@@ -279,6 +279,14 @@
     <option value="osm">OSM</option>
     <option value="positron">CARTO Positron</option>
   </select>
+
+  <div class="row">
+    <div class="chip">
+      <input type="checkbox" id="showPaths">
+      <span>Show me the path</span>
+    </div>
+  </div>
+
 <div class="row">
     <button id="polyBtn" class="small">Polygon selection (active pane)</button>
     <button id="clearBtn" class="small">Clear selection (active pane)</button>
@@ -304,7 +312,7 @@
   <div class="pane" id="paneA">
     <div class="map" id="mapA"></div>
     <div class="panelRight" id="resultsA">
-      <h3>Results, left city</h3>
+      <h3>Results, <span id="resultsCityA">left city</span></h3>
       <div class="resultsText" id="resultsAText">Pick a filter and select grid cells to see results.</div>
 </div>
   </div>
@@ -312,7 +320,7 @@
   <div class="pane hidden" id="paneB">
     <div class="map" id="mapB"></div>
     <div class="panelRight" id="resultsB">
-      <h3>Results, right city</h3>
+      <h3>Results, <span id="resultsCityB">right city</span></h3>
       <div class="resultsText" id="resultsBText">Pick a filter and select grid cells to see results.</div>
 </div>
   </div>
@@ -347,6 +355,7 @@
   const BASEMAPS = {
     osm:{
       version:8,
+      glyphs:"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
       sources:{
         base:{
           type:"raster",
@@ -359,6 +368,7 @@
     },
     positron:{
       version:8,
+      glyphs:"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
       sources:{
         base:{
           type:"raster",
@@ -424,10 +434,13 @@
 
   // Layer ids used in both maps so we can refer to them safely
   const LAYERS = {
+    perimetersCasing: "perimeters-casing",
     perimetersLine: "perimeters-line",
     gridsFill: "grids-fill",
     gridsLine: "grids-line",
     facilitiesSym: "facilities-sym",
+    selectionFill: "selection-fill",
+    selectionLine: "selection-line",
     routesLine: "routes-line",
     routesLabels: "routes-labels"
   };
@@ -441,6 +454,10 @@
   const elBasemap = document.getElementById("basemapSelect");
   const elSelCells = document.getElementById("selCells");
   const elSelMeta = document.getElementById("selMeta");
+
+  const elShowPaths = document.getElementById("showPaths");
+  const elResultsCityA = document.getElementById("resultsCityA");
+  const elResultsCityB = document.getElementById("resultsCityB");
 
   const elPaneB = document.getElementById("paneB");
   const elResultsAText = document.getElementById("resultsAText");
@@ -542,6 +559,12 @@
   function getFilter2Label(code){
     const x = FILTER2.find(d => d.code === code);
     return x ? x.label : "Unknown";
+  }
+
+  // Update the "Results, <city>" headers using current pane cities
+  function updateResultsHeaders(){
+    if(elResultsCityA) elResultsCityA.textContent = APP.stateA?.city ? String(APP.stateA.city) : "left city";
+    if(elResultsCityB) elResultsCityB.textContent = APP.stateB?.city ? String(APP.stateB.city) : "right city";
   }
 
   // Decide which tokens are allowed in route filtering
@@ -671,14 +694,17 @@
       chloropleth: null,
       socio: null,
       socioById: new Map(),
-      idToCity: new Map()
+      idToCity: new Map(),
+      gridFeatById: new Map()
     },
     maps: null,
     compare: false,
     activePane: "A",
     stateA: null,
     stateB: null,
-    routeCache: new Map()
+    routeCache: new Map(),
+    showPaths: false,
+    basemapToken: 0
   };
 
   // Each pane keeps its own selection and interaction state so compare mode is independent
@@ -691,8 +717,13 @@
       timeCatById: new Map(),
       timeCatStateIds: new Set(),
       draw: null,
-      popup: new maplibregl.Popup({ closeButton:false, closeOnClick:false }),
-      lastHoverKey: null
+
+      // Two separate popups so grid tooltips and facility tooltips do not fight each other
+      popupGrid: new maplibregl.Popup({ closeButton:false, closeOnClick:false }),
+      popupFacility: new maplibregl.Popup({ closeButton:false, closeOnClick:false }),
+
+      // Avoid binding the same event handlers multiple times (important when switching basemaps)
+      eventsBound: false
     };
   }
 
@@ -714,14 +745,29 @@
 
   function addLayers(map, state){
         map.addSource("perimeters", { type:"geojson", data: APP.data.perimeters });
+
+    // Perimeters style: lighter and more readable than a thick solid black line
+    // We draw a subtle casing below, then a dashed main line above.
+    map.addLayer({
+      id: LAYERS.perimetersCasing,
+      type:"line",
+      source:"perimeters",
+      paint:{
+        "line-color":"#ffffff",
+        "line-width": 5.5,
+        "line-opacity":0.22
+      }
+    });
+
     map.addLayer({
       id: LAYERS.perimetersLine,
       type:"line",
       source:"perimeters",
       paint:{
         "line-color":"#111111",
-        "line-width": 6,
-        "line-opacity":0.65
+        "line-width": 2.8,
+        "line-opacity":0.65,
+        "line-dasharray":[2,2]
       }
     });
 
@@ -775,6 +821,33 @@
       layout: { visibility: "none" }
     });
 
+    // Selection geometry (dissolved polygon) drawn on top of the grids
+    // This helps the user "see" the selected area as one shape.
+    map.addSource("selection", { type:"geojson", data: { type:"FeatureCollection", features: [] } });
+
+    map.addLayer({
+      id: LAYERS.selectionFill,
+      type:"fill",
+      source:"selection",
+      paint:{
+        "fill-color":"#111111",
+        "fill-opacity":0.06
+      },
+      layout:{ visibility:"none" }
+    });
+
+    map.addLayer({
+      id: LAYERS.selectionLine,
+      type:"line",
+      source:"selection",
+      paint:{
+        "line-color":"#111111",
+        "line-width":2.2,
+        "line-opacity":0.85
+      },
+      layout:{ visibility:"none" }
+    });
+
     map.addSource("facilities", { type:"geojson", data: APP.data.facilities });
 
     // Facilities are rendered as circles (reliable across browsers and avoids missing icon issues)
@@ -810,12 +883,17 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
       source:"routes",
       layout:{
         "symbol-placement":"line",
+        "symbol-spacing": 220,
+
+        // Distance label on top of the path
+        // For line placement, text-offset moves the text slightly away from the line
         "text-field":[
           "concat",
           ["get","distance_input"],
           " km"
         ],
         "text-size":11,
+        "text-offset":[0, -1.2],
         "text-keep-upright": true
       },
       paint:{
@@ -831,11 +909,32 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
   // Wire mouse and click interactions: selection, hover modes, tooltips
 
   function bindInteractions(map, state){
+    if(state.eventsBound) return;
+    state.eventsBound = true;
+
     map.on("click", () => { APP.activePane = state.paneId; });
 
     map.on("mouseenter", LAYERS.gridsFill, () => { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", LAYERS.gridsFill, () => { map.getCanvas().style.cursor = ""; });
 
+
+    // Grid tooltip: show the cell id on hover
+    map.on("mousemove", LAYERS.gridsFill, (e) => {
+      const f = e.features && e.features[0];
+      if(!f) return;
+      const pid = safeGet(f.properties, "id");
+      if(pid === null || pid === undefined) return;
+
+      // If we are hovering a grid cell, remove the facility popup (if any)
+      state.popupFacility.remove();
+
+      state.popupGrid
+        .setLngLat(e.lngLat)
+        .setHTML(`<div style="font-size:12px;"><b>Cell id</b>: ${String(pid)}</div>`)
+        .addTo(map);
+    });
+
+    map.on("mouseleave", LAYERS.gridsFill, () => { state.popupGrid.remove(); });
     map.on("click", LAYERS.gridsFill, (e) => {
       const f = e.features && e.features[0];
       if(!f) return;
@@ -849,10 +948,11 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
       const f = e.features && e.features[0];
       if(!f) return;
       const name = safeGet(f.properties, "BPE_type_name") || "Facility";
-      state.popup.setLngLat(e.lngLat).setHTML(`<div style="font-size:12px;font-weight:700;">${String(name)}</div>`).addTo(map);
+      state.popupGrid.remove();
+      state.popupFacility.setLngLat(e.lngLat).setHTML(`<div style="font-size:12px;font-weight:700;">${String(name)}</div>`).addTo(map);
     });
 
-    map.on("mouseleave", LAYERS.facilitiesSym, () => { state.popup.remove(); });
+    map.on("mouseleave", LAYERS.facilitiesSym, () => { state.popupFacility.remove(); });
   }
 
   // Selection management
@@ -873,6 +973,60 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
     else selectGrid(map, state, id);
   }
 
+
+  // Build and draw a dissolved polygon of the currently selected grid cells
+  // This runs after every selection update.
+  function updateSelectionGeometryForPane(paneId){
+    const state = paneId === "A" ? APP.stateA : APP.stateB;
+    const map = paneId === "A" ? APP.maps.mapA : APP.maps.mapB;
+
+    const ids = Array.from(state.selectedIds);
+    if(ids.length === 0){
+      map.getSource("selection").setData({ type:"FeatureCollection", features: [] });
+      map.setLayoutProperty(LAYERS.selectionFill, "visibility", "none");
+      map.setLayoutProperty(LAYERS.selectionLine, "visibility", "none");
+      return;
+    }
+
+    // Collect the polygon features of selected cells
+    const feats = [];
+    for(const id of ids){
+      const f = APP.data.gridFeatById.get(String(id));
+      if(f) feats.push(f);
+    }
+
+    if(feats.length === 0){
+      map.getSource("selection").setData({ type:"FeatureCollection", features: [] });
+      map.setLayoutProperty(LAYERS.selectionFill, "visibility", "none");
+      map.setLayoutProperty(LAYERS.selectionLine, "visibility", "none");
+      return;
+    }
+
+    // Try to dissolve with iterative union
+    let merged = null;
+    let unionOk = true;
+
+    try{
+      for(const f of feats){
+        if(!merged) merged = f;
+        else{
+          const u = turf.union(merged, f);
+          if(u) merged = u;
+        }
+      }
+    }catch(err){
+      unionOk = false;
+    }
+
+    const data = unionOk && merged
+      ? { type:"FeatureCollection", features: [merged] }
+      : { type:"FeatureCollection", features: feats };
+
+    map.getSource("selection").setData(data);
+    map.setLayoutProperty(LAYERS.selectionFill, "visibility", "visible");
+    map.setLayoutProperty(LAYERS.selectionLine, "visibility", "visible");
+  }
+
   function clearSelectionForPane(paneId){
     const state = paneId === "A" ? APP.stateA : APP.stateB;
     const map = paneId === "A" ? APP.maps.mapA : APP.maps.mapB;
@@ -885,6 +1039,11 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
     map.getSource("routes").setData({ type:"FeatureCollection", features: [] });
     map.setLayoutProperty(LAYERS.routesLine, "visibility", "none");
     map.setLayoutProperty(LAYERS.routesLabels, "visibility", "none");
+
+    // Also clear the dissolved selection polygon
+    map.getSource("selection").setData({ type:"FeatureCollection", features: [] });
+    map.setLayoutProperty(LAYERS.selectionFill, "visibility", "none");
+    map.setLayoutProperty(LAYERS.selectionLine, "visibility", "none");
   }
 
   function getActivePaneStateAndMap(){
@@ -917,6 +1076,8 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
 
     const city = state.city;
     if(!city) return;
+
+    map.setFilter(LAYERS.perimetersCasing, ["==", ["to-string", ["get","city"]], String(city)]);
 
     map.setFilter(LAYERS.perimetersLine, ["==", ["to-string", ["get","city"]], String(city)]);
 
@@ -1061,6 +1222,14 @@ map.addSource("routes", { type:"geojson", data: { type:"FeatureCollection", feat
 
     const f1 = Number(elFilter1.value) || 0;
     const f2 = Number(elFilter2.value) || 0;
+
+    // If the user does not want to show paths, keep routes hidden and skip fetching
+    if(!APP.showPaths){
+      map.getSource("routes").setData({ type:"FeatureCollection", features: [] });
+      map.setLayoutProperty(LAYERS.routesLine, "visibility", "none");
+      map.setLayoutProperty(LAYERS.routesLabels, "visibility", "none");
+      return;
+    }
 
     if(f1 <= 0 || state.selectedIds.size === 0){
       map.getSource("routes").setData({ type:"FeatureCollection", features: [] });
@@ -1304,6 +1473,7 @@ function sumSocioForIds(ids){
       applyChoroplethForPane(paneId);
     }
 
+    updateSelectionGeometryForPane(paneId);
     await updateRoutesForPane(paneId);
     renderResultsForPane(paneId);
   }
@@ -1322,7 +1492,11 @@ function sumSocioForIds(ids){
 
   function updateUIAfterSelection(){
     updateSelectionSummary();
-    updateRoutesForPane(APP.activePane === "B" ? "B" : "A");
+
+    const pane = (APP.activePane === "B" && APP.compare) ? "B" : "A";
+    updateSelectionGeometryForPane(pane);
+
+    updateRoutesForPane(pane);
     renderResultsForPane("A");
     if(APP.compare) renderResultsForPane("B");
   }
@@ -1396,10 +1570,19 @@ function sumSocioForIds(ids){
     }
 
     // Build id to city index (from grids)
+    // Also build a fast lookup: id -> GeoJSON feature (for drawing the dissolved selection polygon)
     for(const f of (APP.data.grids.features || [])){
       const id = String(f.properties?.id ?? "");
       const city = String(f.properties?.city ?? "");
       if(id && city) APP.data.idToCity.set(id, city);
+
+      if(id && f.geometry && (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")){
+        APP.data.gridFeatById.set(id, {
+          type:"Feature",
+          properties:{},
+          geometry: f.geometry
+        });
+      }
     }
 
 // Build socio index
@@ -1424,6 +1607,8 @@ function sumSocioForIds(ids){
 
     elCityA.value = APP.stateA.city || "";
     elCityB.value = APP.stateB.city || "";
+
+    updateResultsHeaders();
 
     // Wait for both maps to load
     await new Promise((resolve) => {
@@ -1453,13 +1638,24 @@ function sumSocioForIds(ids){
     await updateEverythingAllPanes();
 
     // UI events
+    // Show or hide routes (paths). Default is OFF to keep the map clean.
+    APP.showPaths = false;
+    if(elShowPaths) elShowPaths.checked = false;
+
+    elShowPaths.addEventListener("change", async (e) => {
+      APP.showPaths = !!e.target.checked;
+      await updateEverythingAllPanes();
+    });
+
     elCompare.addEventListener("change", async (e) => {
       setCompare(e.target.value === "on");
+      updateResultsHeaders();
       await updateEverythingAllPanes();
     });
 
     elCityA.addEventListener("change", async (e) => {
       APP.stateA.city = e.target.value;
+      updateResultsHeaders();
       clearSelectionForPane("A");
       cityFlyTo(APP.maps.mapA, APP.stateA.city);
       await updateEverythingForPane("A");
@@ -1468,6 +1664,7 @@ function sumSocioForIds(ids){
 
     elCityB.addEventListener("change", async (e) => {
       APP.stateB.city = e.target.value;
+      updateResultsHeaders();
       clearSelectionForPane("B");
       cityFlyTo(APP.maps.mapB, APP.stateB.city);
       await updateEverythingForPane("B");
@@ -1499,11 +1696,17 @@ function sumSocioForIds(ids){
 
     // Basemap
     // Switching style resets custom layers, so we rebuild overlays after the new style loads.
-    elBasemap.addEventListener("change", (e) => {
+    elBasemap.addEventListener("change", async (e) => {
       const key = e.target.value;
       if(!BASEMAPS[key]) return;
 
-      const rebuildFor = (map, state, paneId) => {
+      // Token to ignore stale rebuilds if the user changes basemap multiple times quickly
+      const token = ++APP.basemapToken;
+
+      // Disable the dropdown while rebuilding to avoid overlapping setStyle calls
+      elBasemap.disabled = true;
+
+      const rebuildFor = (map, state, paneId) => new Promise((resolve) => {
         const center = map.getCenter();
         const zoom = map.getZoom();
         const bearing = map.getBearing();
@@ -1518,12 +1721,16 @@ function sumSocioForIds(ids){
         map.setStyle(BASEMAPS[key]);
 
         map.once("style.load", async () => {
-          // Re add sources and layers
+          if(token !== APP.basemapToken){
+            resolve();
+            return;
+          }
+
+          // Re add sources and layers (custom overlays)
           addLayers(map, state);
 
-          // Re add tools and events
+          // Re add Draw tool (events were bound only once and will work with the recreated layers)
           setupDraw(map, state);
-          bindInteractions(map, state);
 
           // Restore view
           map.jumpTo({ center, zoom, bearing, pitch });
@@ -1540,14 +1747,21 @@ function sumSocioForIds(ids){
           const f1 = Number(elFilter1.value) || 0;
           if(f1 > 0) applyChoroplethForPane(paneId);
 
+          updateSelectionGeometryForPane(paneId);
           await updateRoutesForPane(paneId);
           renderResultsForPane(paneId);
           updateSelectionSummary();
-        });
-      };
 
-      rebuildFor(APP.maps.mapA, APP.stateA, "A");
-      rebuildFor(APP.maps.mapB, APP.stateB, "B");
+          resolve();
+        });
+      });
+
+      await Promise.all([
+        rebuildFor(APP.maps.mapA, APP.stateA, "A"),
+        rebuildFor(APP.maps.mapB, APP.stateB, "B")
+      ]);
+
+      if(token === APP.basemapToken) elBasemap.disabled = false;
     });
 
   }
